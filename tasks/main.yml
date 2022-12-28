@@ -1,0 +1,49 @@
+---
+- name: Ensure that the procps package is installed
+  apt:
+    name: procps
+    state: present
+  when: ansible_os_family == 'Debian'
+
+- name: Ensure that the procps package is installed
+  yum:
+    name: procps
+    state: present
+  when:
+    - ansible_distribution_major_version <= '6'
+    - ansible_os_family == 'RedHat'
+
+- name: Ensure that the procps-ng package is installed
+  yum:
+    name: procps-ng
+    state: present
+  when:
+    - ansible_distribution_major_version >= '7'
+    - ansible_os_family == 'RedHat'
+
+- name: Get sysctl config from host
+  shell: sysctl -p
+  register: sysctl_list
+  changed_when: false
+
+- name: Split keys from sysctl_list
+  set_fact:
+    sysctl_configs_list: "{{ sysctl_configs_list | default([]) + [ (item|split(' = '))[0] ] }}"
+  with_items: "{{ sysctl_list.stdout_lines }}"
+  
+- name: Clear config
+  sysctl:
+    name: "{{ item }}"
+    sysctl_set: "{{ sysctl_set }}"
+    state: absent
+    reload: "{{ sysctl_reload }}"
+  with_items: "{{ sysctl_configs_list | default([]) | difference(sysctl_settings.keys()) }}"
+
+- name: Apply sysctl settings.
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: "{{ sysctl_set }}"
+    state: present
+    reload: "{{ sysctl_reload }}"
+  with_dict: "{{ sysctl_settings }}"
